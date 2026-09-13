@@ -49,6 +49,8 @@ Ove odluke su donete i ne preispituju se tokom implementacije:
 | 12 | Vlasnik vidi **učinak svakog trenera**: termine i novac koji donosi | `pt_sessions.revenue_cents` zamrznut pri završetku, izveštaj 8.4 |
 | 14 | **Treneri ne dobijaju proviziju — nikada** | Nema kolona za proviziju, nema obračuna provizije, nema izveštaja o proviziji |
 | 13 | Bivši član se **anonimizuje, ne briše** | Finansijska istorija ostaje, lični podaci nestaju (poglavlje 12) |
+| 15 | **Treneri ne koriste aplikaciju.** Koriste je samo vlasnik, menadžer i recepcija | Treneri su evidencija u tabeli `trainers`, bez naloga; uloge u `gym_users` su samo owner, manager, reception; nema rute `(trainer)` |
+| 16 | **Start sa jednom teretanom**, model spreman za više | `gym_id` i RLS svuda od početka; druga teretana se dodaje bez izmene šeme |
 
 ---
 
@@ -89,8 +91,12 @@ Sve tabele imaju: `id uuid PK`, `gym_id uuid NOT NULL`, `created_at`, `updated_a
 U prvoj verziji svaka teretana ima jednu lokaciju, ali sve transakcione tabele nose `location_id` od početka.
 
 **`gym_users`**
-`gym_id`, `user_id` (FK na `auth.users`), `role` (owner | manager | reception | trainer), `location_id` (nullable), `full_name`, `phone`, `active`
-Jedan korisnik može biti u više teretana — zato je ovo zasebna tabela, a ne kolona na useru.
+`gym_id`, `user_id` (FK na `auth.users`), `role` (owner | manager | reception), `location_id` (nullable), `full_name`, `phone`, `active`
+Jedan korisnik može biti u više teretana — zato je ovo zasebna tabela, a ne kolona na useru. Ovde su samo zaposleni koji se prijavljuju u aplikaciju.
+
+**`trainers`**
+`gym_id`, `full_name`, `phone`, `active`
+Treneri nemaju nalog i ne koriste aplikaciju. Svi `trainer_id` u šemi pokazuju na ovu tabelu. Termine im zakazuje i označava recepcija, menadžer ili vlasnik.
 
 **`audit_log`**
 `gym_id`, `user_id`, `action`, `entity_type`, `entity_id`, `before jsonb`, `after jsonb`, `ip`, `created_at`
@@ -248,28 +254,31 @@ Bez ovoga dashboard prikazuje prihod, a vlasnika zanima profit.
 
 ## 5. Uloge i prava
 
-| Modul | owner | manager | reception | trainer |
-|-------|:-----:|:-------:|:---------:|:-------:|
-| Članovi — pregled i unos | ✓ | ✓ | ✓ | samo svoji |
-| Članovi — anonimizacija (umesto brisanja) | ✓ | — | — | — |
-| Check-in | ✓ | ✓ | ✓ | ✓ |
-| Prodaja članarine | ✓ | ✓ | ✓ | — |
-| Ručni popust / izmena cene | ✓ | — | — | — |
-| Popust unosom koda | ✓ | ✓ | ✓ | — |
-| Generisanje i gašenje kodova za popust | ✓ | — | — | — |
-| Storno uplate | ✓ | ✓ | — | — |
-| Zatvaranje smene | ✓ | ✓ | ✓ (svoje) | — |
-| Izmena zatvorene smene | ✓ | ✓ | — | — |
-| POS prodaja | ✓ | ✓ | ✓ | — |
-| Katalog paketa i cene | ✓ | ✓ | — | — |
-| Personalni — raspored | ✓ | ✓ | ✓ | svoji |
-| Personalni — označavanje opravdanog izostanka | ✓ | ✓ | ✓ | svoji |
-| Učinak trenera (izveštaj 8.4) | ✓ | — | — | — |
-| Leadovi | ✓ | ✓ | ✓ | — |
-| Finansijski izveštaji | ✓ | ✓ | — | — |
-| Troškovi | ✓ | — | — | — |
-| Podešavanja teretane | ✓ | — | — | — |
-| Audit log | ✓ | ✓ (čita) | — | — |
+| Modul | owner | manager | reception |
+|-------|:-----:|:-------:|:---------:|
+| Članovi — pregled i unos | ✓ | ✓ | ✓ |
+| Članovi — anonimizacija (umesto brisanja) | ✓ | — | — |
+| Check-in | ✓ | ✓ | ✓ |
+| Prodaja članarine | ✓ | ✓ | ✓ |
+| Ručni popust / izmena cene | ✓ | — | — |
+| Popust unosom koda | ✓ | ✓ | ✓ |
+| Generisanje i gašenje kodova za popust | ✓ | — | — |
+| Storno uplate | ✓ | ✓ | — |
+| Zatvaranje smene | ✓ | ✓ | ✓ (svoje) |
+| Izmena zatvorene smene | ✓ | ✓ | — |
+| POS prodaja | ✓ | ✓ | ✓ |
+| Katalog paketa i cene | ✓ | ✓ | — |
+| Treneri — evidencija | ✓ | ✓ | — |
+| Personalni — raspored | ✓ | ✓ | ✓ |
+| Personalni — označavanje održano / izostanak | ✓ | ✓ | ✓ |
+| Učinak trenera (izveštaj 8.4) | ✓ | — | — |
+| Leadovi | ✓ | ✓ | ✓ |
+| Finansijski izveštaji | ✓ | ✓ | — |
+| Troškovi | ✓ | — | — |
+| Podešavanja teretane | ✓ | — | — |
+| Audit log | ✓ | ✓ (čita) | — |
+
+Treneri nisu uloga — nemaju nalog i ne pristupaju aplikaciji.
 
 Ova matrica se implementira **dvaput**: kao RLS politika u bazi i kao provera u UI sloju. RLS je izvor istine; UI samo sakriva dugmad.
 
@@ -346,7 +355,7 @@ Ekran je stalno otvoren na recepciji, fokus uvek u polju za unos.
 
 **Tok B — plaćanje po treningu:** sesija se kreira sa `credit_id = NULL` i `price_cents` → po završetku se evidentira uplata.
 
-Trener na telefonu vidi svoj dan i označava „održano" / „nije se pojavio — neopravdano" / „opravdano odsutan". Neopravdan izostanak (`no_show`) **troši kredit**; opravdan (`excused`) **ne troši** i traži razlog. Pravilo je fiksno, nije podešavanje po teretani. Recepcija može naknadno prebaciti `no_show` u `excused` (npr. član donese potvrdu) — kredit se vraća, promena ide u audit log.
+Recepcija (ili menadžer/vlasnik) u rasporedu po treneru označava „održano" / „nije se pojavio — neopravdano" / „opravdano odsutan". Neopravdan izostanak (`no_show`) **troši kredit**; opravdan (`excused`) **ne troši** i traži razlog. Pravilo je fiksno, nije podešavanje po teretani. Recepcija može naknadno prebaciti `no_show` u `excused` (npr. član donese potvrdu) — kredit se vraća, promena ide u audit log.
 
 ### 7.5 Lead
 
@@ -416,7 +425,7 @@ Klik na trenera otvara listu njegovih sesija u periodu (datum, član, status, vr
 Svaka faza je jedna ili više sesija sa Claude Code. Faza se ne napušta dok kriterijum „gotovo je kada" nije ispunjen.
 
 ### Faza 0 — Temelji
-Repo, Next.js, Supabase projekat, migracije, **sve tabele iz poglavlja 4** (uključujući grupne treninge), RLS politike, auth, `gym_users`, audit trigger, osnovni layout i navigacija po ulozi, seed skripta sa jednom teretanom i test korisnicima.
+Repo, Next.js, Supabase projekat, migracije, **sve tabele iz poglavlja 4** (uključujući grupne treninge), RLS politike, auth, `gym_users`, audit trigger, osnovni layout i navigacija po ulozi, seed skripta sa test korisnicima. Seed ima dve teretane samo lokalno, da test izolacije ima šta da dokaže; u Supabase projekat u oblaku idu samo migracije, nikad seed.
 
 > **Gotovo je kada:** korisnik sa `role=reception` iz teretane A ne može pročitati nijedan red iz teretane B ni preko jednog query-ja, i to je dokazano testom.
 
@@ -446,7 +455,7 @@ Service worker, IndexedDB kopija, outbox, idempotency, indikator statusa, blokad
 > **Gotovo je kada:** sa isključenom mrežom obavljeno 20 check-inova i 5 uplata, a po povratku veze u bazi je tačno 20 i 5 — ni jedan više ni manje, uz dvostruko slanje reda.
 
 ### Faza 6 — Personalni treninzi
-Katalog, kupovina kredita, pojedinačne sesije, raspored trenera na telefonu, opravdan/neopravdan izostanak, kodovi za popust na PT paketima i pojedinačnim treninzima, obračun prihoda po sesiji, izveštaj učinka trenera (8.4).
+Katalog, kupovina kredita, pojedinačne sesije, evidencija trenera, raspored po treneru, opravdan/neopravdan izostanak, kodovi za popust na PT paketima i pojedinačnim treninzima, obračun prihoda po sesiji, izveštaj učinka trenera (8.4).
 
 > **Gotovo je kada:** promena cene PT paketa ne menja `revenue_cents` na već završenim sesijama; `excused` ne troši kredit a `no_show` troši; na test podacima zbir realizovanog prihoda svih trenera + preostali krediti + istekli krediti tačno odgovara ukupno naplaćenim PT paketima.
 
@@ -503,7 +512,7 @@ Kalendar, raspored, rezervacije, lista čekanja, otkazivanje sa rokom, evidencij
 ### 10.2 Struktura
 
 ```
-/app             rute (grupisane po ulozi: (reception), (management), (trainer))
+/app             rute (grupisane po ulozi: (reception), (management))
 /components      deljene komponente
 /lib/db          upiti, tipovi generisani iz Supabase šeme
 /lib/offline     IndexedDB sloj i outbox
@@ -569,7 +578,7 @@ Anonimizacija je nepovratna.
 | SMS poruke | **12 meseci** | telefon i tekst se brišu; status i cena ostaju za kvotu i troškove |
 | Finansijski zapisi (`payments`, `memberships`, `pt_*`, `pos_*`, `shifts`, `expenses`) | trajno | ne brišu se; nemaju lične podatke osim veze na člana |
 | Dolasci (`check_ins`) | trajno | ostaju vezani za anonimizovanog člana |
-| Bivši zaposleni (`gym_users.active = false`) | ime trajno (potrebno za izveštaje), telefon **24 meseca** | telefon → NULL |
+| Bivši zaposleni i treneri (`gym_users.active = false`, `trainers.active = false`) | ime trajno (potrebno za izveštaje), telefon **24 meseca** | telefon → NULL |
 | Teretana koja prekine saradnju | **90 dana** od suspenzije | ponuđen izvoz svih podataka, zatim trajno brisanje tenanta |
 
 ### 12.3 Napomena
@@ -589,7 +598,7 @@ Definicije su u `.claude/agents/`. Princip: **kod piše glavna sesija** (ima kon
 | `migration-guard` | čuvar | Sonnet | ništa | Pregled migracija: `gym_id`, RLS u istoj migraciji, `_cents`, enumi, `client_op_id`, nepromenjene stare migracije |
 | `rules-reviewer` | čuvar | Sonnet | ništa | Izmene naspram `CLAUDE.md`: van obima, izmišljene funkcije, `service_role`, `localStorage`, hardkodovan tekst, vremenska zona |
 | `finance-guard` | čuvar | **Opus** | `tests/finance/` | Uplate, storno, smene, popusti i kodovi, zaokruživanje, `revenue_cents`, zalihe |
-| `reception-ux-reviewer` | čuvar | Sonnet | ništa | Tastatura, fokus skenera, semafor, broj klikova, vlasnik bez unosa, trener na telefonu |
+| `reception-ux-reviewer` | čuvar | Sonnet | ništa | Tastatura, fokus skenera, semafor, broj klikova, vlasnik bez unosa |
 | `privacy-guard` | čuvar | Sonnet | ništa | Anonimizacija, rokovi iz poglavlja 12, SMS saglasnost, curenje ličnih podataka |
 | `access-tester` | tester | **Opus** | `tests/access/` | Izolacija tenanta za svaku tabelu u bazi + matrica uloga iz poglavlja 5 |
 | `offline-chaos-tester` | tester | **Opus** | `tests/offline/` | Prekidi mreže, dvostruko slanje, više uređaja, blokada zatvaranja smene |

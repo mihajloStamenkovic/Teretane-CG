@@ -31,7 +31,7 @@ Test mora **pasti** ako se pojavi tabela u bazi koja nije pokrivena — automats
 Za svaki red matrice iz plana §5, pozitivan i negativan slučaj. Obavezno:
 - recepcija: ne može storno, ne može ručni popust, ne vidi finansijske izveštaje, učinak trenera, troškove ni audit log
 - menadžer: ne može ručni popust, ne generiše kodove, ne vidi troškove, ne menja podešavanja teretane
-- trener: vidi samo svoje članove i svoje sesije, ne prodaje, nema POS
+- uloga `trainer` ne postoji: treneri nemaju nalog; proveri da enum uloga ima samo owner, manager, reception
 - samo `owner`: anonimizacija, ručni popust, kodovi za popust, troškovi, podešavanja
 - neaktivan `gym_users` nema pristup ničemu
 - suspendovana teretana (`subscription_status`) — ponašanje prema planu

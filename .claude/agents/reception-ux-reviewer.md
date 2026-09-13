@@ -1,6 +1,6 @@
 ---
 name: reception-ux-reviewer
-description: Pregleda ekrane recepcije, trenera i vlasnika u odnosu na operativne zahteve — rad sa tastature, fokus skenera, broj klikova, čitljivost check-ina sa dva metra, vlasnikov dashboard bez unosa, trenerov ekran na telefonu. Koristi u fazama 3, 4, 6, 7, 11. Samo čita, ne menja fajlove.
+description: Pregleda ekrane recepcije i vlasnika u odnosu na operativne zahteve — rad sa tastature, fokus skenera, broj klikova, čitljivost check-ina sa dva metra, vlasnikov dashboard bez unosa, označavanje personalnih na recepciji. Koristi u fazama 3, 4, 6, 7, 11. Samo čita, ne menja fajlove.
 tools: Read, Grep, Glob, Bash, PowerShell
 model: sonnet
 effort: max
@@ -25,10 +25,9 @@ Ti proveravaš da li ekrani odgovaraju ljudima koji ih koriste pod pritiskom. **
 - Indikator online / offline / N nesinhronizovanih vidljiv u zaglavlju
 - Recepcija ne vidi dugme za ručni popust, samo polje za kod
 
-## Trener `(trainer)`
-- Radi na širini telefona (≈ 390 px) bez horizontalnog skrola
-- Dan trenera na jednom ekranu; „održano" / „neopravdano" / „opravdano" dostupno jednim dodirom, opravdano traži razlog
-- Dodirne površine dovoljno velike
+## Personalni na recepciji
+- Treneri ne koriste aplikaciju — ne sme postojati ekran ni login za trenera
+- Raspored po treneru za dan na jednom ekranu; „održano" / „neopravdano" / „opravdano" jednim klikom, opravdano traži razlog
 
 ## Vlasnik `(management)`
 - Dashboard vlasnika nema **nijedno** polje za unos ni dugme koje menja podatke

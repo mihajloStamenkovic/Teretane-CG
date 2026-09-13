@@ -19,7 +19,8 @@ Ti praviš test podatke na kojima se sve ostalo proverava. Loš seed znači da t
 **Tenanti i korisnici**
 - Najmanje dve teretane (A i B) sa **namerno sličnim podacima** (ista imena članova, isti kodovi popusta) da test izolacije ima šta da uhvati
 - Jedna suspendovana teretana
-- U svakoj: owner, manager, 2× reception, 3× trainer, jedan neaktivan zaposleni
+- U svakoj: owner, manager, 2× reception (sa nalogom), jedan neaktivan zaposleni; 3× trener i jedan neaktivan trener u `trainers` (bez naloga)
+- Seed je samo za lokalnu bazu — nikad se ne pušta u Supabase projekat u oblaku
 - Jedan korisnik koji radi u dve teretane
 - Dokumentovani login podaci test korisnika
 

@@ -6,11 +6,11 @@ Kontekst i pravila za rad na ovom repozitorijumu. Pročitaj u celini pre prve iz
 
 ## Projekat
 
-Interna aplikacija za vođenje teretane. Koriste je **isključivo zaposleni** — vlasnik, menadžer, recepcija, treneri. Evidencija članova, dolazaka, članarina, uplata, personalnih treninga, prodaje, ormarića i leadova, sa izveštajima.
+Interna aplikacija za vođenje teretane. Koriste je **isključivo zaposleni** — vlasnik, menadžer, recepcija. **Treneri ne koriste aplikaciju** — oni su samo evidencija (`trainers`), bez naloga. Evidencija članova, dolazaka, članarina, uplata, personalnih treninga, prodaje, ormarića i leadova, sa izveštajima.
 
 Tržište: Crna Gora. Valuta: EUR. Interfejs: crnogorski/srpski, latinica.
 
-Multi-tenant od početka — jedna instalacija opslužuje više teretana.
+Multi-tenant od početka — jedna instalacija opslužuje više teretana. Start je sa jednom teretanom, ali šema i RLS se nikad ne pojednostavljuju zbog toga.
 
 **Detaljna specifikacija je u `docs/plan.md`. Ovaj fajl su pravila; plan je sadržaj.**
 
@@ -69,7 +69,7 @@ Prekršaj bilo kog od ovih znači da zadatak nije završen.
 ## Struktura
 
 ```
-/app              rute, grupisane po ulozi: (reception), (management), (trainer)
+/app              rute, grupisane po ulozi: (reception), (management)
 /components       deljene komponente
 /lib/db           upiti i tipovi generisani iz Supabase šeme
 /lib/offline      IndexedDB sloj i outbox
