@@ -6,7 +6,7 @@ Kontekst i pravila za rad na ovom repozitorijumu. Pročitaj u celini pre prve iz
 
 ## Projekat
 
-Interna aplikacija za vođenje teretane. Koriste je **isključivo zaposleni** — vlasnik, menadžer, recepcija. **Treneri ne koriste aplikaciju** — oni su samo evidencija (`trainers`), bez naloga. Evidencija članova, dolazaka, članarina, uplata, personalnih treninga, prodaje, ormarića i leadova, sa izveštajima.
+Interna aplikacija za vođenje teretane. Koriste je **isključivo zaposleni** — vlasnik, menadžer, recepcija. Recepcija radi na **jednom zajedničkom nalogu**; ko je radio određuje recepcioner izabran pri otvaranju smene (`shifts.receptionist_id`). **Treneri ne koriste aplikaciju** — oni su samo evidencija (`trainers`), bez naloga. Evidencija članova, dolazaka, članarina, uplata, personalnih treninga, prodaje, ormarića i leadova, sa izveštajima.
 
 Tržište: Crna Gora. Valuta: EUR. Interfejs: crnogorski/srpski, latinica.
 

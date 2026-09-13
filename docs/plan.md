@@ -51,6 +51,9 @@ Ove odluke su donete i ne preispituju se tokom implementacije:
 | 13 | Bivši član se **anonimizuje, ne briše** | Finansijska istorija ostaje, lični podaci nestaju (poglavlje 12) |
 | 15 | **Treneri ne koriste aplikaciju.** Koriste je samo vlasnik, menadžer i recepcija | Treneri su evidencija u tabeli `trainers`, bez naloga; uloge u `gym_users` su samo owner, manager, reception; nema rute `(trainer)` |
 | 16 | **Start sa jednom teretanom**, model spreman za više | `gym_id` i RLS svuda od početka; druga teretana se dodaje bez izmene šeme |
+| 17 | **Recepcija radi na jednom zajedničkom nalogu** „recepcija", bez isteka sesije; recepcioner bira svoje ime pri otvaranju smene | Tabela `receptionists` (bez naloga); `shifts.receptionist_id`; sve što nalog recepcije uradi pripisuje se recepcioneru otvorene smene |
+| 18 | **Veze između tabela idu preko `(gym_id, id)`** | Kompozitni FK — baza sama sprečava da red iz teretane A pokazuje na red iz teretane B |
+| 19 | **Prava se proveravaju u bazi pri svakom upitu**, ne samo iz JWT-a | RLS pomoćna funkcija čita `gym_users` (aktivan, uloga) jednom po upitu; deaktivacija i promena uloge važe odmah |
 
 ---
 
@@ -62,7 +65,7 @@ Ove odluke su donete i ne preispituju se tokom implementacije:
 | Stilizacija | Tailwind + shadcn/ui | Gusti, tabelarni UI za recepciju |
 | Baza | Supabase (PostgreSQL) | RLS kao primarni sigurnosni sloj |
 | Auth | Supabase Auth | `gym_id` i `role` u JWT claim-u |
-| Hosting | Vercel, EU region | Baza takođe EU region |
+| Hosting | Vercel, EU region | Baza takođe EU region. Postojeći Supabase projekat je **razvojni** (bez pravih podataka); produkcijski se pravi posebno pri predaji vlasniku |
 | Cron | pg_cron | Isticanje članarina, SMS red, noćni obračuni |
 | Offline | PWA + IndexedDB | Service worker, outbox sinhronizacija |
 | SMS | Infobip ili lokalni agregator | Apstrahovan iza internog interfejsa |
@@ -92,7 +95,11 @@ U prvoj verziji svaka teretana ima jednu lokaciju, ali sve transakcione tabele n
 
 **`gym_users`**
 `gym_id`, `user_id` (FK na `auth.users`), `role` (owner | manager | reception), `location_id` (nullable), `full_name`, `phone`, `active`
-Jedan korisnik može biti u više teretana — zato je ovo zasebna tabela, a ne kolona na useru. Ovde su samo zaposleni koji se prijavljuju u aplikaciju.
+Jedan korisnik može biti u više teretana — zato je ovo zasebna tabela, a ne kolona na useru. Ovde su samo nalozi koji se prijavljuju u aplikaciju: vlasnik i menadžer lično, a recepcija kao **jedan zajednički nalog** po teretani (`role = reception`), bez isteka sesije.
+
+**`receptionists`**
+`gym_id`, `full_name`, `phone`, `active`
+Ljudi koji rade na recepciji. Nemaju nalog. Pri otvaranju smene na nalogu recepcije bira se ime sa ovog spiska; sve akcije naloga recepcije dok je smena otvorena pripisuju se tom recepcioneru (pazar, override, storno zahtevi, audit). Nalog recepcije ne može da upisuje uplate, check-in ni POS bez otvorene smene.
 
 **`trainers`**
 `gym_id`, `full_name`, `phone`, `active`
@@ -122,7 +129,7 @@ Indeksi: trigram index na `first_name`, `last_name`, `phone` — pretraga na rec
 `name`, `kind` (time_based | visit_based | daily), `duration_days`, `visit_count`, `price_cents`, `allow_freeze`, `max_freeze_days`, `color`, `sort_order`, `active`
 
 **`memberships`** — kupljena članarina
-`member_id`, `package_id`, `price_paid_cents`, `discount_cents`, `discount_code_id` (nullable), `discount_reason`, `start_date`, `end_date`, `visits_total`, `visits_used`, `status` (active | expired | frozen | cancelled), `sold_by`, `previous_membership_id`
+`location_id`, `member_id`, `package_id`, `price_paid_cents`, `discount_cents`, `discount_code_id` (nullable), `discount_reason`, `start_date`, `end_date`, `visits_total`, `visits_used`, `status` (active | expired | frozen | cancelled), `sold_by`, `previous_membership_id`
 
 > **Ograničenje:** `CREATE UNIQUE INDEX ... ON memberships(member_id) WHERE status IN ('active','frozen')`
 
@@ -146,17 +153,17 @@ Odmrzavanje produžava `memberships.end_date` za broj iskorišćenih dana.
 ### 4.4 Dolasci
 
 **`check_ins`**
-`location_id`, `member_id`, `membership_id` (nullable), `card_id` (nullable), `checked_in_at`, `checked_out_at`, `method` (card | search | manual), `created_by`, `device_id`, `is_override` (bool), `override_reason`, `client_op_id` (uuid, unique — idempotency za offline)
+`location_id`, `shift_id` (nullable — vlasnik/menadžer mogu bez smene), `member_id`, `membership_id` (nullable), `card_id` (nullable), `checked_in_at`, `checked_out_at`, `method` (card | search | manual), `created_by`, `device_id`, `is_override` (bool), `override_reason`, `client_op_id` (uuid, unique — idempotency za offline)
 
 `is_override` znači da je recepcija pustila člana bez aktivne članarine. Ovo je izveštaj koji vlasnik gleda.
 
 ### 4.5 Novac
 
 **`shifts`**
-`location_id`, `opened_by`, `opened_at`, `closed_by`, `closed_at`, `opening_cash_cents`, `counted_cash_cents`, `expected_cash_cents`, `difference_cents`, `difference_reason`, `status` (open | closed | locked)
+`location_id`, `receptionist_id` (obavezan kad smenu otvara nalog recepcije), `opened_by`, `opened_at`, `closed_by`, `closed_at`, `opening_cash_cents`, `counted_cash_cents`, `expected_cash_cents`, `difference_cents`, `difference_reason`, `status` (open | closed | locked)
 
 **`payments`**
-`member_id` (nullable — anonimna POS prodaja), `amount_cents`, `method` (cash | card | transfer | other), `purpose` (membership | personal_training | pos | locker | card_replacement | other), `ref_type`, `ref_id`, `paid_at`, `shift_id`, `created_by`, `note`, `is_reversal` (bool), `reverses_payment_id`, `client_op_id`
+`location_id`, `member_id` (nullable — anonimna POS prodaja), `amount_cents`, `method` (cash | card | transfer | other), `purpose` (membership | personal_training | pos | locker | card_replacement | other), `ref_type`, `ref_id`, `paid_at`, `shift_id`, `created_by`, `note`, `is_reversal` (bool), `reverses_payment_id`, `client_op_id`
 
 > **Pravilo:** `payments` nema UPDATE ni DELETE. Postgres trigger to blokira na nivou baze, ne na nivou aplikacije. Ispravka = novi red sa `is_reversal=true` i negativnim `amount_cents`.
 
@@ -169,7 +176,7 @@ Odmrzavanje produžava `memberships.end_date` za broj iskorišćenih dana.
 `member_id`, `pt_package_id`, `trainer_id`, `sessions_total`, `sessions_used`, `price_paid_cents`, `discount_cents`, `discount_code_id`, `discount_reason`, `sold_by`, `purchased_at`, `expires_at`, `status` (active | used_up | expired)
 
 **`pt_sessions`**
-`member_id`, `trainer_id`, `credit_id` (nullable — NULL znači plaćanje po treningu), `scheduled_at`, `duration_min`, `status` (scheduled | completed | no_show | excused | cancelled), `excuse_reason`, `marked_by`, `marked_at`, `price_cents` (samo kad `credit_id` je NULL), `discount_cents`, `discount_code_id`, `discount_reason` (samo kad `credit_id` je NULL), `payment_id`, `revenue_cents`, `notes`
+`location_id`, `member_id`, `trainer_id`, `credit_id` (nullable — NULL znači plaćanje po treningu), `scheduled_at`, `duration_min`, `status` (scheduled | completed | no_show | excused | cancelled), `excuse_reason`, `marked_by`, `marked_at`, `price_cents` (samo kad `credit_id` je NULL), `discount_cents`, `discount_code_id`, `discount_reason` (samo kad `credit_id` je NULL), `payment_id`, `revenue_cents`, `notes`
 
 Statusi:
 - `completed` — održano, troši kredit
@@ -342,7 +349,7 @@ Ekran je stalno otvoren na recepciji, fokus uvek u polju za unos.
 
 ### 7.3 Zatvaranje smene
 
-1. Recepcioner na početku smene unosi početni keš i otvara smenu.
+1. Recepcioner na početku smene bira svoje ime sa spiska `receptionists`, unosi početni keš i otvara smenu. Jedna otvorena smena po lokaciji.
 2. Sve uplate u toku smene automatski dobijaju `shift_id`.
 3. Na kraju unosi prebrojan keš.
 4. Sistem prikazuje očekivano, prebrojano i razliku. Razlika se **ne sakriva**.
@@ -376,7 +383,7 @@ Jedan ekran, bez unosa: pazar juče i ovaj mesec, broj aktivnih članova, koliko
 
 ### 8.2 Operativni
 
-- Dnevni pazar po načinu plaćanja i po zaposlenom
+- Dnevni pazar po načinu plaćanja i po zaposlenom (za nalog recepcije — po recepcioneru smene)
 - Lista članova sa isteklom članarinom (sa telefonima, za zvanje)
 - Dolasci po satu i danu u nedelji — određuje raspored osoblja
 - Override ulasci — ko je i koliko puta puštao bez članarine
@@ -578,7 +585,7 @@ Anonimizacija je nepovratna.
 | SMS poruke | **12 meseci** | telefon i tekst se brišu; status i cena ostaju za kvotu i troškove |
 | Finansijski zapisi (`payments`, `memberships`, `pt_*`, `pos_*`, `shifts`, `expenses`) | trajno | ne brišu se; nemaju lične podatke osim veze na člana |
 | Dolasci (`check_ins`) | trajno | ostaju vezani za anonimizovanog člana |
-| Bivši zaposleni i treneri (`gym_users.active = false`, `trainers.active = false`) | ime trajno (potrebno za izveštaje), telefon **24 meseca** | telefon → NULL |
+| Bivši zaposleni, recepcioneri i treneri (`active = false` u `gym_users`, `receptionists`, `trainers`) | ime trajno (potrebno za izveštaje), telefon **24 meseca** | telefon → NULL |
 | Teretana koja prekine saradnju | **90 dana** od suspenzije | ponuđen izvoz svih podataka, zatim trajno brisanje tenanta |
 
 ### 12.3 Napomena
