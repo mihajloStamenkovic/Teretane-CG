@@ -110,6 +110,7 @@ Posle svake izmene šeme **obavezno** regeneriši tipove.
 4. Posle izmene šeme pokreni `supabase db reset` i `npm run typecheck`.
 5. Pre kraja faze pokreni test izolacije tenanta. Ako padne, faza nije gotova.
 6. Kriterijum „Gotovo je kada" za svaku fazu stoji u `docs/plan.md`. Ne prelazi na sledeću dok nije ispunjen.
+7. Agenti: posle migracije `migration-guard` i `access-tester`, pre commita `rules-reviewer`, na kraju faze `phase-verifier`. Ostali po tabeli u `docs/plan.md` §13. PALO bilo kog agenta blokira sledeći korak. Agenti ne pišu kod aplikacije — to radi glavna sesija.
 
 ---
 

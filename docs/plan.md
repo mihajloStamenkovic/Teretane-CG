@@ -575,3 +575,64 @@ Anonimizacija je nepovratna.
 ### 12.3 Napomena
 
 Rokovi su postavljeni po principima GDPR-a, na kojima se zasniva i crnogorski zakon o zaštiti podataka o ličnosti. Pre prvog kupca van pilota potvrditi sa pravnikom; rokovi su u jednom mestu i lako se menjaju.
+
+---
+
+## 13. Agenti
+
+Definicije su u `.claude/agents/`. Princip: **kod piše glavna sesija** (ima kontekst plana i odluka); agenti proveravaju, testiraju i rade zaokružene jednokratne poslove. Nijedan agent ne menja kod aplikacije ni migracije.
+
+### 13.1 Spisak
+
+| Agent | Grupa | Model | Sme da piše | Zadatak |
+|-------|-------|-------|-------------|---------|
+| `migration-guard` | čuvar | Sonnet | ništa | Pregled migracija: `gym_id`, RLS u istoj migraciji, `_cents`, enumi, `client_op_id`, nepromenjene stare migracije |
+| `rules-reviewer` | čuvar | Sonnet | ništa | Izmene naspram `CLAUDE.md`: van obima, izmišljene funkcije, `service_role`, `localStorage`, hardkodovan tekst, vremenska zona |
+| `finance-guard` | čuvar | **Opus** | `tests/finance/` | Uplate, storno, smene, popusti i kodovi, zaokruživanje, `revenue_cents`, zalihe |
+| `reception-ux-reviewer` | čuvar | Sonnet | ništa | Tastatura, fokus skenera, semafor, broj klikova, vlasnik bez unosa, trener na telefonu |
+| `privacy-guard` | čuvar | Sonnet | ništa | Anonimizacija, rokovi iz poglavlja 12, SMS saglasnost, curenje ličnih podataka |
+| `access-tester` | tester | **Opus** | `tests/access/` | Izolacija tenanta za svaku tabelu u bazi + matrica uloga iz poglavlja 5 |
+| `offline-chaos-tester` | tester | **Opus** | `tests/offline/` | Prekidi mreže, dvostruko slanje, više uređaja, blokada zatvaranja smene |
+| `perf-verifier` | tester | Sonnet | `tests/perf/` | Check-in < 300 ms, pretraga < 200 ms, izveštaji, `EXPLAIN ANALYZE` |
+| `reports-verifier` | tester | **Opus** | `tests/reports/` | Izveštaji naspram nezavisno izračunatih vrednosti; zone, DST, naplaćeno vs realizovano |
+| `seed-builder` | izvršilac | Sonnet | `supabase/seed.sql`, `supabase/seed/` | Test podaci: više teretana, dve godine istorije, ivični slučajevi, `expected.json` |
+| `member-importer` | izvršilac | Sonnet | `scripts/import/` | Čišćenje i uvoz tabele pilot teretane; uvoz tek posle potvrde korisnika |
+| `phase-verifier` | kapija | **Opus** | ništa | Build, lint, typecheck, testovi, kriterijum „Gotovo je kada" → PROŠLO / PALO |
+
+**Zašto Opus:** greška ovih agenata je najskuplja i najteža za primetiti — procureli podaci druge teretane, izgubljena ili duplirana uplata, pogrešna brojka na osnovu koje vlasnik odlučuje, i lažno „gotovo". Ostali rade po jasnom spisku provera i Sonnet je dovoljan.
+
+### 13.2 Tok rada u fazi
+
+```
+glavna sesija: migracija
+  → migration-guard → access-tester
+glavna sesija: tipovi → upiti → UI
+  → finance-guard / reception-ux-reviewer / privacy-guard (šta faza dira)
+pre commita
+  → rules-reviewer
+kraj faze
+  → testeri relevantni za fazu → phase-verifier
+```
+
+Presuda PALO bilo kog agenta blokira sledeći korak dok se ne popravi i ponovo ne proveri.
+
+### 13.3 Agenti po fazi (pored `migration-guard`, `rules-reviewer`, `access-tester` i `phase-verifier`, koji idu u svakoj fazi)
+
+| Faza | Dodatni agenti |
+|------|----------------|
+| 0 — Temelji | `seed-builder` |
+| 1 — Članovi i kartice | `member-importer`, `perf-verifier`, `privacy-guard` |
+| 2 — Paketi i članarine | `finance-guard` |
+| 3 — Check-in | `reception-ux-reviewer`, `perf-verifier` |
+| 4 — Uplate i smene | `finance-guard`, `reception-ux-reviewer`, `reports-verifier` |
+| 5 — Offline | `offline-chaos-tester` |
+| 6 — Personalni treninzi | `finance-guard`, `reception-ux-reviewer`, `reports-verifier` |
+| 7 — POS i zalihe | `finance-guard`, `reception-ux-reviewer`, `offline-chaos-tester` |
+| 8 — Ormarići i oprema | `reception-ux-reviewer` |
+| 9 — Leadovi | `reports-verifier` |
+| 10 — SMS | `privacy-guard` |
+| 11 — Izveštaji | `reports-verifier`, `perf-verifier`, `reception-ux-reviewer` |
+| 12 — Multi-lokacija i super-admin | `privacy-guard` |
+| 13 — Grupni treninzi | `reception-ux-reviewer` |
+
+`seed-builder` se ponovo pokreće u svakoj fazi koja dodaje tabele.
