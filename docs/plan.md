@@ -44,9 +44,10 @@ Ove odluke su donete i ne preispituju se tokom implementacije:
 | 7 | **SMS obaveštenja postoje** | Provajder, šablon, kvota, saglasnost člana |
 | 8 | **Grupni treninzi nisu u prvoj verziji**, ali model ih predviđa | Tabele se kreiraju u Fazi 0, UI tek u Fazi 13 |
 | 9 | Offline režim je **obavezan** za check-in i uplate | Outbox obrazac, idempotency ključevi |
-| 10 | **Ručni popust daje isključivo vlasnik.** Svi ostali popust ostvaruju samo unosom koda koji je vlasnik generisao | Tabela `discount_codes`, `memberships.discount_code_id`, provera uloge u bazi |
+| 10 | **Ručni popust daje isključivo vlasnik.** Svi ostali popust ostvaruju samo unosom koda koji je vlasnik generisao | Tabela `discount_codes`; kod važi za članarine, personalne (paket i pojedinačno) i POS; provera uloge u bazi |
 | 11 | Personalni: **neopravdan izostanak troši kredit, opravdan ne troši** | Statusi `no_show` i `excused` na `pt_sessions`, razlog obavezan za `excused` |
 | 12 | Vlasnik vidi **učinak svakog trenera**: termine i novac koji donosi | `pt_sessions.revenue_cents` zamrznut pri završetku, izveštaj 8.4 |
+| 14 | **Treneri ne dobijaju proviziju — nikada** | Nema kolona za proviziju, nema obračuna provizije, nema izveštaja o proviziji |
 | 13 | Bivši član se **anonimizuje, ne briše** | Finansijska istorija ostaje, lični podaci nestaju (poglavlje 12) |
 
 ---
@@ -88,9 +89,8 @@ Sve tabele imaju: `id uuid PK`, `gym_id uuid NOT NULL`, `created_at`, `updated_a
 U prvoj verziji svaka teretana ima jednu lokaciju, ali sve transakcione tabele nose `location_id` od početka.
 
 **`gym_users`**
-`gym_id`, `user_id` (FK na `auth.users`), `role` (owner | manager | reception | trainer), `location_id` (nullable), `full_name`, `phone`, `active`, `commission_type` (percent | fixed | none), `commission_percent_bp` (integer, bazni poeni: 2500 = 25%), `commission_fixed_cents` (iznos po održanoj sesiji)
+`gym_id`, `user_id` (FK na `auth.users`), `role` (owner | manager | reception | trainer), `location_id` (nullable), `full_name`, `phone`, `active`
 Jedan korisnik može biti u više teretana — zato je ovo zasebna tabela, a ne kolona na useru.
-Procenat se ne čuva u `_cents` koloni — to nije novac. Popunjena je samo kolona koja odgovara `commission_type` (CHECK constraint).
 
 **`audit_log`**
 `gym_id`, `user_id`, `action`, `entity_type`, `entity_id`, `before jsonb`, `after jsonb`, `ip`, `created_at`
@@ -123,12 +123,15 @@ Indeksi: trigram index na `first_name`, `last_name`, `phone` — pretraga na rec
 > **Popust:** ako je `discount_cents > 0`, mora biti popunjeno tačno jedno od `discount_code_id` ili `discount_reason` (CHECK). Ručni popust (`discount_reason` bez koda) sme da upiše samo `owner` — proverava se u bazi (trigger/funkcija prodaje), ne samo u UI.
 
 **`discount_codes`** — kodovi za popust, generiše ih isključivo vlasnik
-`code` (unique po `gym_id`, nasumičan, 8 znakova bez dvosmislenih slova 0/O/1/I, lako se kuca), `kind` (percent | fixed), `percent_bp` (bazni poeni, samo za `percent`), `amount_cents` (samo za `fixed`), `valid_from`, `valid_until` (nullable), `max_uses` (nullable = neograničeno), `uses_count`, `note`, `active`, `created_by`
+`code` (unique po `gym_id`, nasumičan, 8 znakova bez dvosmislenih slova 0/O/1/I, lako se kuca), `kind` (percent | fixed), `percent_bp` (bazni poeni, 2500 = 25%, samo za `percent`), `amount_cents` (samo za `fixed`), `valid_from`, `valid_until` (nullable), `max_uses` (nullable = neograničeno), `uses_count`, `note`, `active`, `created_by`
 
-- Popust se primenjuje na cenu paketa; fiksni popust ne može oboriti cenu ispod nule.
+Kod važi svuda gde se nešto prodaje: `memberships`, `pt_credits`, pojedinačne `pt_sessions` i `pos_sales`. Svaka od tih tabela nosi isti trojac kolona `discount_cents`, `discount_code_id`, `discount_reason` i isti CHECK i proveru uloge kao `memberships`.
+
+- Popust se primenjuje na cenu paketa, sesije ili ukupan iznos POS računa; fiksni popust ne može oboriti cenu ispod nule.
+- Percent se ne čuva u `_cents` koloni — to nije novac.
 - `uses_count` se povećava u istoj transakciji kao prodaja, uz zaključavanje reda — `max_uses` se ne može prekoračiti ni istovremenim prodajama.
 - Kod se ne briše (vezan je za finansijsku istoriju), samo se deaktivira.
-- Unos koda zahteva vezu sa serverom; offline se kod ne može iskoristiti.
+- Unos koda zahteva vezu sa serverom; offline se kod ne može iskoristiti. POS prodaja bez koda i dalje radi offline.
 
 **`membership_freezes`**
 `membership_id`, `start_date`, `end_date`, `days`, `reason`, `created_by`
@@ -157,10 +160,10 @@ Odmrzavanje produžava `memberships.end_date` za broj iskorišćenih dana.
 `name`, `sessions_count`, `price_cents`, `validity_days` (nullable), `trainer_id` (nullable — cena može biti opšta ili po treneru), `active`
 
 **`pt_credits`** — kupljen paket
-`member_id`, `pt_package_id`, `trainer_id`, `sessions_total`, `sessions_used`, `price_paid_cents`, `sold_by`, `purchased_at`, `expires_at`, `status` (active | used_up | expired)
+`member_id`, `pt_package_id`, `trainer_id`, `sessions_total`, `sessions_used`, `price_paid_cents`, `discount_cents`, `discount_code_id`, `discount_reason`, `sold_by`, `purchased_at`, `expires_at`, `status` (active | used_up | expired)
 
 **`pt_sessions`**
-`member_id`, `trainer_id`, `credit_id` (nullable — NULL znači plaćanje po treningu), `scheduled_at`, `duration_min`, `status` (scheduled | completed | no_show | excused | cancelled), `excuse_reason`, `marked_by`, `marked_at`, `price_cents` (samo kad `credit_id` je NULL), `payment_id`, `revenue_cents`, `commission_cents`, `notes`
+`member_id`, `trainer_id`, `credit_id` (nullable — NULL znači plaćanje po treningu), `scheduled_at`, `duration_min`, `status` (scheduled | completed | no_show | excused | cancelled), `excuse_reason`, `marked_by`, `marked_at`, `price_cents` (samo kad `credit_id` je NULL), `discount_cents`, `discount_code_id`, `discount_reason` (samo kad `credit_id` je NULL), `payment_id`, `revenue_cents`, `notes`
 
 Statusi:
 - `completed` — održano, troši kredit
@@ -168,13 +171,11 @@ Statusi:
 - `excused` — **opravdan** izostanak, ne troši kredit; `excuse_reason` obavezan (CHECK), promena ide u audit log
 - `cancelled` — termin otkazan unapred, ne troši kredit
 
-`trainer_id` na sesiji je trener koji je stvarno održao termin (zamena je moguća); prihod i provizija idu njemu, ne treneru sa `pt_credits`.
+`trainer_id` na sesiji je trener koji je stvarno održao termin (zamena je moguća); prihod se pripisuje njemu, ne treneru sa `pt_credits`.
 
-**Zamrzavanje pri prelasku u `completed` ili `no_show`:**
-- `revenue_cents` — vrednost sesije za teretanu. Za kredit: `price_paid_cents / sessions_total` zaokruženo naniže, a poslednja sesija kredita dobija ostatak, tako da zbir sesija tačno odgovara ceni paketa. Za pojedinačnu: `price_cents`.
-- `commission_cents` — iz `revenue_cents` i podešavanja trenera u tom trenutku (`percent`: `revenue_cents × percent_bp / 10000`; `fixed`: `commission_fixed_cents`).
+**Zamrzavanje pri prelasku u `completed` ili `no_show`:** `revenue_cents` — vrednost sesije za teretanu. Za kredit: `price_paid_cents / sessions_total` zaokruženo naniže, a poslednja sesija kredita dobija ostatak, tako da zbir sesija tačno odgovara plaćenoj ceni paketa (posle popusta). Za pojedinačnu: `price_cents − discount_cents`. Upisuje se jednom i ne menja se. Za `excused` i `cancelled` je 0.
 
-Oba iznosa se upisuju jednom i ne menjaju se — kasnija promena procenta ili cene paketa ne dira istoriju. Za `excused` i `cancelled` oba su 0.
+Treneri ne dobijaju proviziju — sistem je ne računa i ne čuva.
 
 ### 4.7 Prodaja i zalihe
 
@@ -182,7 +183,7 @@ Oba iznosa se upisuju jednom i ne menjaju se — kasnija promena procenta ili ce
 `name`, `category`, `barcode`, `price_cents`, `cost_cents`, `stock_qty`, `min_stock`, `track_stock` (bool), `active`
 
 **`pos_sales`**
-`location_id`, `member_id` (nullable), `shift_id`, `sold_by`, `sold_at`, `total_cents`, `payment_id`, `client_op_id`
+`location_id`, `member_id` (nullable), `shift_id`, `sold_by`, `sold_at`, `total_cents`, `discount_cents`, `discount_code_id`, `discount_reason`, `payment_id`, `client_op_id`
 
 **`pos_sale_items`**
 `sale_id`, `product_id`, `qty`, `unit_price_cents`, `line_total_cents`
@@ -262,7 +263,6 @@ Bez ovoga dashboard prikazuje prihod, a vlasnika zanima profit.
 | POS prodaja | ✓ | ✓ | ✓ | — |
 | Katalog paketa i cene | ✓ | ✓ | — | — |
 | Personalni — raspored | ✓ | ✓ | ✓ | svoji |
-| Provizije — pregled | ✓ | ✓ | — | svoje |
 | Personalni — označavanje opravdanog izostanka | ✓ | ✓ | ✓ | svoji |
 | Učinak trenera (izveštaj 8.4) | ✓ | — | — | — |
 | Leadovi | ✓ | ✓ | ✓ | — |
@@ -382,7 +382,6 @@ Jedan ekran, bez unosa: pazar juče i ovaj mesec, broj aktivnih članova, koliko
 - Prosečan vek člana i ukupan prihod po članu
 - Konverzija leadova po izvoru i po zaposlenom
 - Prihod minus troškovi = profit po mesecu
-- Provizije trenera za obračun
 - Iskorišćenost kodova za popust — koliko puta, ukupan iznos popusta, prodaja po kodu
 
 ### 8.4 Učinak trenera (vlasnik, telefon, samo čitanje)
@@ -400,8 +399,7 @@ Lista trenera za izabrani mesec, sortirana po realizovanom prihodu. Za svakog tr
 | Prodati paketi (broj i naplaćeno) | `pt_credits` sa tim `trainer_id`, `purchased_at` u periodu |
 | Pojedinačni treninzi (naplaćeno) | `payments` vezane za `pt_sessions` sa `credit_id IS NULL` |
 | **Realizovan prihod** | zbir `pt_sessions.revenue_cents` (`completed` + `no_show`) |
-| Provizija | zbir `pt_sessions.commission_cents` |
-| **Neto za teretanu** | realizovan prihod − provizija |
+| Dati popusti | zbir `discount_cents` na PT paketima i pojedinačnim treninzima tog trenera |
 | Preostali krediti (obaveza) | neiskorišćene sesije aktivnih kredita × vrednost sesije |
 | Isto, isti mesec prošle godine | poređenje zbog sezonalnosti |
 
@@ -409,7 +407,7 @@ Ispod liste: **istekli neiskorišćeni krediti** u periodu — prihod teretane k
 
 Razlika između „naplaćeno" i „realizovano": paket plaćen u januaru a odrađen do marta donosi novac u januaru, a treneru se pripisuje kroz mesece u kojima je stvarno radio. Vlasnik vidi oba broja.
 
-Klik na trenera otvara listu njegovih sesija u periodu (datum, član, status, vrednost, provizija).
+Klik na trenera otvara listu njegovih sesija u periodu (datum, član, status, vrednost).
 
 ---
 
@@ -448,12 +446,12 @@ Service worker, IndexedDB kopija, outbox, idempotency, indikator statusa, blokad
 > **Gotovo je kada:** sa isključenom mrežom obavljeno 20 check-inova i 5 uplata, a po povratku veze u bazi je tačno 20 i 5 — ni jedan više ni manje, uz dvostruko slanje reda.
 
 ### Faza 6 — Personalni treninzi
-Katalog, kupovina kredita, pojedinačne sesije, raspored trenera na telefonu, opravdan/neopravdan izostanak, obračun prihoda i provizije po sesiji, izveštaj učinka trenera (8.4).
+Katalog, kupovina kredita, pojedinačne sesije, raspored trenera na telefonu, opravdan/neopravdan izostanak, kodovi za popust na PT paketima i pojedinačnim treninzima, obračun prihoda po sesiji, izveštaj učinka trenera (8.4).
 
-> **Gotovo je kada:** promena procenta provizije trenera ne menja iznos na već završenim sesijama; `excused` ne troši kredit a `no_show` troši; na test podacima zbir realizovanog prihoda svih trenera + preostali krediti + istekli krediti tačno odgovara ukupno naplaćenim PT paketima.
+> **Gotovo je kada:** promena cene PT paketa ne menja `revenue_cents` na već završenim sesijama; `excused` ne troši kredit a `no_show` troši; na test podacima zbir realizovanog prihoda svih trenera + preostali krediti + istekli krediti tačno odgovara ukupno naplaćenim PT paketima.
 
 ### Faza 7 — POS i zalihe
-Katalog proizvoda, brza prodaja, veza sa članom ili anonimno, kretanje zaliha, alarm ispod minimuma.
+Katalog proizvoda, brza prodaja, veza sa članom ili anonimno, kod za popust na račun (samo online), kretanje zaliha, alarm ispod minimuma.
 
 > **Gotovo je kada:** stanje zaliha posle 50 prodaja i jednog prijema robe odgovara ručnom prebrojavanju.
 
@@ -538,9 +536,7 @@ Ova pravila idu u `CLAUDE.md` u korenu repozitorijuma:
 Za odluku pre odgovarajuće faze, ne blokiraju start:
 
 1. **Prag razlike u kasi** iznad kojeg je razlog obavezan — konkretan iznos, čuva se u `gyms.settings` (Faza 4)
-2. **Da li trener dobija proviziju za `no_show`** — kredit se troši, ali da li je trener zaradio (Faza 6)
-3. **Da li kodovi za popust važe i za personalne pakete i POS**, ili samo za članarine — trenutno samo članarine (Faza 6/7)
-4. **SMS provajder i cena po poruci** u Crnoj Gori, registracija sender ID-ja (Faza 10)
+2. **SMS provajder i cena po poruci** u Crnoj Gori, registracija sender ID-ja (Faza 10)
 
 Odloženo, nije tema do daljeg: model licenciranja prema drugim teretanama.
 
@@ -573,7 +569,7 @@ Anonimizacija je nepovratna.
 | SMS poruke | **12 meseci** | telefon i tekst se brišu; status i cena ostaju za kvotu i troškove |
 | Finansijski zapisi (`payments`, `memberships`, `pt_*`, `pos_*`, `shifts`, `expenses`) | trajno | ne brišu se; nemaju lične podatke osim veze na člana |
 | Dolasci (`check_ins`) | trajno | ostaju vezani za anonimizovanog člana |
-| Bivši zaposleni (`gym_users.active = false`) | ime trajno (potrebno za izveštaje i provizije), telefon **24 meseca** | telefon → NULL |
+| Bivši zaposleni (`gym_users.active = false`) | ime trajno (potrebno za izveštaje), telefon **24 meseca** | telefon → NULL |
 | Teretana koja prekine saradnju | **90 dana** od suspenzije | ponuđen izvoz svih podataka, zatim trajno brisanje tenanta |
 
 ### 12.3 Napomena

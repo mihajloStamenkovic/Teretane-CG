@@ -13,4 +13,3 @@ Plan je predviđao da `no_show` uvek troši kredit, uz podešavanje po teretani.
 
 ## Posledice
 - Novi status `excused` u enumu `pt_sessions.status`, kolone `excuse_reason`, `marked_by`, `marked_at`.
-- Otvoreno: da li trener dobija proviziju za `no_show`.

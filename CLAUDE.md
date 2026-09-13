@@ -57,7 +57,9 @@ Prekršaj bilo kog od ovih znači da zadatak nije završen.
 - Nazivi tabela i kolona: engleski, `snake_case`, tabele u množini.
 - Kod kartice (`cards.code`) je **nasumičan token**. Nikad `member_no`, nikad sekvenca, nikad nešto što se može pogoditi.
 - Ključ ormarića se vezuje za **`check_in_id`**, ne za `member_id`.
-- Prihod i provizija trenera se **zamrzavaju** u `pt_sessions.revenue_cents` i `commission_cents` pri prelasku u `completed` ili `no_show`. Kasnija promena procenta ili cene ne dira istoriju.
+- Vrednost sesije se **zamrzava** u `pt_sessions.revenue_cents` pri prelasku u `completed` ili `no_show`. Kasnija promena cene ne dira istoriju.
+- **Treneri nemaju proviziju.** Ne dodaji kolone, obračun ni izveštaj provizije.
+- Kod za popust važi za članarine, PT pakete, pojedinačne PT i POS — sve četiri tabele nose `discount_cents`, `discount_code_id`, `discount_reason`.
 - `no_show` (neopravdano) troši kredit; `excused` (opravdano, razlog obavezan) ne troši.
 - Procenti se čuvaju kao `integer` u baznim poenima (`_bp`, 2500 = 25%), nikad u `_cents` koloni.
 - Kodovi za popust (`discount_codes.code`) su nasumični, ne brišu se — samo deaktiviraju.

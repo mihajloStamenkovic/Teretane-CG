@@ -12,7 +12,7 @@ Plan je predviđao da recepcija daje popust do nekog limita. Vlasnik ne želi da
 - Limit popusta za recepciju se ukida.
 
 ## Posledice
-- Nova tabela `discount_codes`, kolona `memberships.discount_code_id`.
+- Nova tabela `discount_codes`.
+- Kod važi za sve prodaje: članarine, PT pakete, pojedinačne PT i POS. Sve četiri tabele nose `discount_cents`, `discount_code_id`, `discount_reason`.
 - Provera uloge i koda u bazi, ne samo u UI.
 - Kod se ne može iskoristiti offline (`max_uses` zahteva server).
-- Otvoreno: da li kodovi važe i za personalne pakete i POS.
