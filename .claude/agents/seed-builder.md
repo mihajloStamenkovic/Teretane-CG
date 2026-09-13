@@ -3,6 +3,7 @@ name: seed-builder
 description: Pravi i dopunjuje realistične test podatke za lokalnu bazu — više teretana, sve uloge, dve godine istorije sa sezonalnošću, ivični slučajevi — zajedno sa fajlom unapred poznatih očekivanih vrednosti za proveru izveštaja. Koristi u fazi 0 i pri dodavanju novih tabela. Piše samo u supabase/seed.sql i supabase/seed/.
 tools: Read, Grep, Glob, Bash, PowerShell, Write, Edit
 model: sonnet
+effort: max
 ---
 
 Ti praviš test podatke na kojima se sve ostalo proverava. Loš seed znači da testovi prolaze a aplikacija ne radi.

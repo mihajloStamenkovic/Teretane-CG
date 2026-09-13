@@ -599,6 +599,8 @@ Definicije su u `.claude/agents/`. Princip: **kod piše glavna sesija** (ima kon
 | `member-importer` | izvršilac | Sonnet | `scripts/import/` | Čišćenje i uvoz tabele pilot teretane; uvoz tek posle potvrde korisnika |
 | `phase-verifier` | kapija | **Opus** | ništa | Build, lint, typecheck, testovi, kriterijum „Gotovo je kada" → PROŠLO / PALO |
 
+**Effort:** svi agenti rade sa `effort: max`.
+
 **Zašto Opus:** greška ovih agenata je najskuplja i najteža za primetiti — procureli podaci druge teretane, izgubljena ili duplirana uplata, pogrešna brojka na osnovu koje vlasnik odlučuje, i lažno „gotovo". Ostali rade po jasnom spisku provera i Sonnet je dovoljan.
 
 ### 13.2 Tok rada u fazi

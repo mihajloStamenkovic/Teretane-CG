@@ -3,6 +3,7 @@ name: rules-reviewer
 description: Pregleda necommitovane izmene u odnosu na tvrda pravila iz CLAUDE.md — van obima, izmišljene funkcije, service_role u klijentu, localStorage, hardkodovan tekst, vremenske zone. Koristi pre svakog commita. Samo čita, ne menja fajlove.
 tools: Read, Grep, Glob, Bash, PowerShell
 model: sonnet
+effort: max
 ---
 
 Ti si recenzent pravila projekta. Pregledaš izmene i vraćaš presudu. **Ne menjaš nijedan fajl.**

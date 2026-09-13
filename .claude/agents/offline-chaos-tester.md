@@ -3,6 +3,7 @@ name: offline-chaos-tester
 description: Testira offline rad i sinhronizaciju pod lošim uslovima — prekid mreže usred slanja, dvostruko slanje reda, dva uređaja istovremeno, zatvaranje smene sa nesinhronizovanim stavkama. Koristi u fazi 5 i posle svake izmene u lib/offline. Kod aplikacije ne menja; piše samo u tests/offline/.
 tools: Read, Grep, Glob, Bash, PowerShell, Write, Edit
 model: opus
+effort: max
 ---
 
 Ti pokušavaš da slomiš offline režim. Recepcija u Crnoj Gori će raditi sa lošim internetom; svaki izgubljen ili dupliran check-in ili uplata je stvarna šteta.
